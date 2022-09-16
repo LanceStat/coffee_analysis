@@ -1,0 +1,156 @@
+---
+title: "Analyzing coffee acidity for different brewing methods"
+author: 
+date: 
+output: github_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+# RCBD with roast as the block
+
+This is an experiment to figure out if different brewing methods affect the acidity of a cup of coffee. We compared a drip machine, French press, and a Moka pot and used Dunkin brand medium, dark, and decaf roasts. To get the acidity readings, a digital ph meter was used. 
+
+We determined the best approach to try and answer our research question was a randomized complete block design. The treatments would be the different brewing methods while our blocking variable would be the roast of coffee. This design requires randomizing observations across each block which we established with a random number generator to set the measurement order of the brewing method for each roast. 
+
+
+
+## Measurement data
+
+
+Constructing our dataframe with the blocks and treatments. On the PH scale, lower values are more acidic. 
+
+
+```{r, message=FALSE}
+library(tidyverse)
+library(agricolae)
+library(car)
+
+frenchpress <- c(5.26, 5.52, 5.44)
+mokapot <- c(5.09, 5.31, 5.30)
+drip <- c(5.44, 5.56, 5.53)
+
+y <- c(frenchpress, mokapot, drip)
+blocks <- as.factor(rep(c("medium", "dark", "decaf"), times = 3))
+treat <- as.factor(rep(c("frenchpress", "mokapot", "drip"), each = 3))
+coffeedat <- data.frame(y, blocks, treat)
+coffeedat
+
+```
+
+
+## Visualizing our observations
+
+```{r}
+ggplot(coffeedat, aes(treat, y)) +
+  geom_boxplot(color = "black", 
+               fill = "darkorange2") +
+  labs(x = "Brewing Method", y = "Acidity")
+
+```
+
+
+The drip and french press methods appear to be much closer and have some overlap, while the moka pot seems to be generally more acidic.
+Will need to test to confirm our observations. 
+
+
+
+```{r}
+#boxplot(y ~ blocks, xlab = "blocks", ylab = "acidity")
+#boxplot(y ~ treat, xlab = "treatments", ylab = "acidity")
+
+library(ggplot2)
+ggplot(data = coffeedat, aes(x = treat, y = y)) + 
+  geom_point(aes(col = blocks), size = 2) + 
+  theme_bw() + 
+  coord_flip() + 
+  labs(title = "Acidity vs Brewing Methods") +
+  xlab("Brewing Method") + 
+  ylab("Acidity")
+
+
+```
+
+
+
+
+## Linear model and ANOVA
+
+```{r}
+mod <- lm(y ~ treat + blocks, data = coffeedat)
+summary(mod)
+anova(mod)
+
+```
+
+
+Preliminary ANOVA suggests the brewing methods do have a significant effect on the acidity of the coffee. 
+
+
+## Checking Normality Assumptions
+
+```{r}
+shapiro.test(mod$residuals)
+
+bartlett.test(y, treat)
+
+par(mfrow=c(2,2))
+resid <- mod$residuals
+qqnorm(resid, pch = 16)
+qqline(resid)
+
+plot(c(treat),resid, pch = 16)  
+abline(h=0)  
+plot(c(blocks),resid, pch = 16)
+abline(h=0)
+fits <- mod$fitted.values
+plot(fits,resid, pch = 16)
+abline(h=0)
+
+shapiro.test(mod$residuals)
+leveneTest(y, treat)
+leveneTest(y, blocks)
+
+friedman.test(y,treat,blocks)
+
+```
+
+Residuals look normal and error variances are the same so we can do pairwise comparison (Both Levene's Test and Shapiro-Wilk test)
+
+
+## Pairwise Comparisons
+
+```{r}
+
+lsd <- LSD.test(aov(y ~ treat + blocks, data = coffeedat), "treat",
+                p.adj = "bonferroni")
+lsd
+
+TukeyHSD(aov(y ~ treat + blocks), conf.level = 0.95)
+
+
+```
+
+Tukey's test confirms again that the moka pot differed from the drip and french press methods. 
+
+
+## Efficiency of RCBD vs CRD
+
+```{r}
+mod2 <- lm(y ~ treat, data = coffeedat)
+anova(mod2)
+anova(mod)
+
+# MSE CRD / MSE RCBD
+E <- .012356 / .001733
+E
+```
+
+Lets compare our design to a complete randomized design - which is basically a randomized design with no blocking factors. Since we didn't actually complete a CRD experiment, we used the MSE from an ANOVA without any blocks as an estimate of the MSE for the CRD. Dividing this MSE with the RCBD MSE gives a test statistic of 7.13.  This implies that it would have taken 7.13 times as many experimental units per treatment to get the same MSE from a CRD design.  This equates to roughly 22 experimental units per treatment, which would mean 66 cups of coffee compared to 9 in our RCBD design. Based on this, our choice of blocking in this experiment proved to be very efficient! 
+
+
+

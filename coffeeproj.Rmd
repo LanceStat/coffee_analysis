@@ -1,0 +1,130 @@
+---
+title: "coffeeproj"
+author: "Lance Davis & Pragna Bhatt"
+date: "12/10/2021"
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+
+
+# RCBD with roast as the block
+
+## Measurement data
+
+```{r, message=FALSE}
+library(tidyverse)
+library(agricolae)
+library(car)
+
+frenchpress <- c(5.26, 5.52, 5.44)
+mokapot <- c(5.09, 5.31, 5.30)
+drip <- c(5.44, 5.56, 5.53)
+
+y <- c(frenchpress, mokapot, drip)
+blocks <- as.factor(rep(c("medium", "dark", "decaf"), times = 3))
+treat <- as.factor(rep(c("frenchpress", "mokapot", "drip"), each = 3))
+coffeedat <- data.frame(y, blocks, treat)
+coffeedat
+
+```
+
+
+## Visualizing our observations
+
+```{r}
+ggplot(coffeedat, aes(treat, y)) +
+  geom_boxplot(color = "black", 
+               fill = "darkorange2") +
+  labs(x = "Brewing Method", y = "Acidity")
+
+```
+
+
+```{r}
+#boxplot(y ~ blocks, xlab = "blocks", ylab = "acidity")
+#boxplot(y ~ treat, xlab = "treatments", ylab = "acidity")
+
+library(ggplot2)
+ggplot(data = coffeedat, aes(x = treat, y = y)) + 
+  geom_point(aes(col = blocks), size = 2) + 
+  theme_bw() + 
+  coord_flip() + 
+  labs(title = "Acidity vs Brewing Methods") +
+  xlab("Brewing Method") + 
+  ylab("Acidity")
+
+
+```
+
+
+## Linear model and ANOVA
+
+```{r}
+mod <- lm(y ~ treat + blocks, data = coffeedat)
+summary(mod)
+anova(mod)
+
+```
+
+
+## Checking Normality Assumptions
+
+```{r}
+shapiro.test(mod$residuals)
+
+bartlett.test(y, treat)
+
+par(mfrow=c(2,2))
+resid <- mod$residuals
+qqnorm(resid, pch = 16)
+qqline(resid)
+
+plot(c(treat),resid, pch = 16)  
+abline(h=0)  
+plot(c(blocks),resid, pch = 16)
+abline(h=0)
+fits <- mod$fitted.values
+plot(fits,resid, pch = 16)
+abline(h=0)
+
+shapiro.test(mod$residuals)
+leveneTest(y, treat)
+leveneTest(y, blocks)
+
+friedman.test(y,treat,blocks)
+
+```
+
+Residuals look normal and error variances are the same so we can do pairwise comparison (Both Levene's Test and Shapiro-Wilk test)
+
+
+## Pairwise Comparisons
+
+```{r}
+
+lsd <- LSD.test(aov(y ~ treat + blocks, data = coffeedat), "treat",
+                p.adj = "bonferroni")
+lsd
+
+TukeyHSD(aov(y ~ treat + blocks), conf.level = 0.95)
+
+
+```
+
+## Efficiency of RCBD vs CRD
+
+```{r}
+mod2 <- lm(y ~ treat, data = coffeedat)
+anova(mod2)
+anova(mod)
+
+# MSE CRD / MSE RCBD
+E <- .012356 / .001733
+E
+```
+
+
